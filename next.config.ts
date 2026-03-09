@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  output: "standalone", // Traces only the files used by the app → tiny Docker image
 };
 
 export default nextConfig;
