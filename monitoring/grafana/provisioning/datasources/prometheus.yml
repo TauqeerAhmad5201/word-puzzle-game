@@ -33,6 +33,11 @@ datasources:
 
   # ── Prometheus Data Source ────────────────────────────────────────────────
   - name: Prometheus
+    # uid: a stable, unique identifier for this datasource.
+    # The dashboard JSON references datasources by uid (e.g. "uid": "prometheus").
+    # Without this, Grafana generates a random uid that won't match and all
+    # panels will show "No data".
+    uid: prometheus
     # type: tells Grafana which kind of data source this is.
     # "prometheus" is the built-in Grafana plugin for Prometheus databases.
     type: prometheus
