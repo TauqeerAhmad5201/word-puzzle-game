@@ -1,0 +1,86 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# FILE: monitoring/grafana/provisioning/dashboards/dashboards.yml
+#
+# PURPOSE:
+#   This file is the "dashboard provisioning" config for Grafana.
+#
+#   Remember how datasources/prometheus.yml told Grafana to auto-connect
+#   to Prometheus? This file does the SAME thing but for DASHBOARDS.
+#   It tells Grafana:
+#     "Hey, look inside this folder for .json dashboard files and load them
+#      automatically when you start up."
+#
+#   Without this file:
+#     - Grafana has no idea that your dashboard JSON files exist.
+#     - You would need to manually import each dashboard through the UI every
+#       time you restart the container.
+#
+#   With this file:
+#     - On every startup, Grafana scans the folder you specify and loads all
+#       .json files it finds as ready-to-use dashboards.
+#     - Open Grafana → Dashboards → and your dashboard is already there.
+#
+#   FOLDER STRUCTURE AFTER THIS SETUP:
+#     monitoring/grafana/provisioning/
+#       ├── datasources/
+#       │   └── prometheus.yml     ← auto-connects to Prometheus (already exists)
+#       └── dashboards/
+#           ├── dashboards.yml     ← THIS file (tells Grafana WHERE to look)
+#           └── word-puzzle.json   ← the actual dashboard with charts
+# ─────────────────────────────────────────────────────────────────────────────
+
+# apiVersion: always 1 for Grafana provisioning files.
+apiVersion: 1
+
+# providers: a list of "dashboard providers".
+# Each provider defines a SOURCE where Grafana should look for dashboards.
+# We only need one provider — a local folder on disk.
+providers:
+
+  # ── Provider: local disk folder ──────────────────────────────────────────
+  - name: "Word Puzzle Dashboards"
+    # name: a human-readable label for this provider. You can use any string.
+    # It appears in Grafana's internal logs to identify this provider.
+
+    # orgId: which Grafana organisation these dashboards belong to.
+    # 1 is the default organisation that always exists. Leave this as 1.
+    orgId: 1
+
+    # type: "file" means Grafana should look for dashboard JSON files on disk.
+    # Other possible values are "s3" or "gcs" (cloud storage) — not needed here.
+    type: file
+
+    # disableDeletion: if set to true, dashboards loaded from this folder
+    # CANNOT be deleted through the Grafana UI. This protects your provisioned
+    # dashboards from being accidentally deleted.
+    # Set to false during learning so you can experiment freely.
+    disableDeletion: false
+
+    # updateIntervalSeconds: how often (in seconds) Grafana re-scans this folder
+    # for new or changed dashboard JSON files.
+    # 10 means: every 10 seconds Grafana checks if anything changed.
+    # This is useful during development — save a JSON file and it appears
+    # in Grafana within ~10 seconds WITHOUT restarting any container.
+    updateIntervalSeconds: 10
+
+    # allowUiUpdates: if true, you can edit the dashboard in Grafana's UI
+    # and the changes will be SAVED BACK to the JSON file on disk.
+    # Set to true so you can tweak panels in the UI and have them persist.
+    allowUiUpdates: true
+
+    options:
+      # path: the ABSOLUTE path INSIDE the Grafana container where the
+      # dashboard JSON files are stored.
+      #
+      # HOW DOES THIS PATH GET THERE?
+      #   In docker-compose.yml we have this volume mount:
+      #     ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      #   That maps our local folder  →  inside the container.
+      #   So this folder on your machine:
+      #     ./monitoring/grafana/provisioning/dashboards/
+      #   becomes this path inside the Grafana container:
+      #     /etc/grafana/provisioning/dashboards/
+      #
+      # Grafana will scan this path for .json files on startup and every
+      # updateIntervalSeconds seconds after that.
+      path: /etc/grafana/provisioning/dashboards

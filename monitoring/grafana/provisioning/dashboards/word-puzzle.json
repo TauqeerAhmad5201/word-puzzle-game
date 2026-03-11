@@ -1,0 +1,584 @@
+{
+  "__comment_overview": [
+    "─────────────────────────────────────────────────────────────────────────",
+    "FILE: monitoring/grafana/provisioning/dashboards/word-puzzle.json",
+    "",
+    "PURPOSE:",
+    "  This is a Grafana dashboard definition written in JSON.",
+    "  Think of it as a 'blueprint' for a wall of charts.",
+    "  Grafana reads this file (via dashboards.yml) and renders it as a",
+    "  real interactive dashboard in your browser.",
+    "",
+    "  You do NOT need to understand every field here.",
+    "  The important ones are explained with comments in the 'panels' array.",
+    "",
+    "HOW IT WORKS (the full pipeline):",
+    "  1. Your Next.js app measures things (heap, CPU, etc.)  → metrics.ts",
+    "  2. Prometheus visits /api/metrics every 15s and stores numbers",
+    "  3. Grafana asks Prometheus: 'what were the numbers over the last hour?'",
+    "  4. Grafana draws the numbers as lines/graphs on this dashboard",
+    "",
+    "METRICS AVAILABLE (all start with 'word_puzzle_' because of your prefix):",
+    "  word_puzzle_nodejs_heap_size_used_bytes   → RAM your app is actively using",
+    "  word_puzzle_nodejs_heap_size_total_bytes  → Total RAM allocated to the heap",
+    "  word_puzzle_nodejs_external_memory_bytes  → Memory used outside the JS heap",
+    "  word_puzzle_nodejs_gc_duration_seconds    → Time spent on garbage collection",
+    "  word_puzzle_nodejs_eventloop_lag_seconds  → How delayed the event loop is",
+    "  word_puzzle_process_cpu_seconds_total     → Total CPU time used",
+    "  word_puzzle_process_open_fds              → Open file descriptors",
+    "─────────────────────────────────────────────────────────────────────────"
+  ],
+
+  "__comment_uid": "uid is a unique identifier for this dashboard. Must be unique across all dashboards.",
+
+  "uid": "word-puzzle-app",
+  "title": "Word Puzzle — App Metrics",
+
+  "__comment_tags": "Tags are labels you can use to find/filter dashboards in Grafana.",
+  "tags": ["word-puzzle", "nodejs", "app"],
+
+  "__comment_timezone": "timezone: 'browser' means use your browser's local timezone for time axes.",
+  "timezone": "browser",
+
+  "__comment_editable": "editable: true lets you drag panels around and edit queries in the UI.",
+  "editable": true,
+
+  "__comment_refresh": "refresh: how often Grafana automatically re-fetches data from Prometheus. '30s' = every 30 seconds.",
+  "refresh": "30s",
+
+  "__comment_time": "time: the default time window shown when you open the dashboard. 'now-1h' = last 1 hour.",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+
+  "schemaVersion": 39,
+  "version": 1,
+
+  "__comment_panels_intro": [
+    "─────────────────────────────────────────────────────────────────────────",
+    "PANELS",
+    "  Each object in this array is ONE chart/panel on the dashboard.",
+    "  A panel has:",
+    "    - type        → what kind of visual (timeseries = line chart, gauge, stat)",
+    "    - title       → the heading shown above the chart",
+    "    - gridPos     → where on the grid this panel sits (x, y, w=width, h=height)",
+    "                    The grid is 24 columns wide.",
+    "    - targets     → the PromQL queries that fetch data from Prometheus",
+    "    - options     → visual settings (colors, units, etc.)",
+    "─────────────────────────────────────────────────────────────────────────"
+  ],
+
+  "panels": [
+
+    {
+      "__comment": "─── PANEL 1: Section heading row ───────────────────────────────────────",
+      "__comment2": "type 'row' is just a collapsible section divider — not a real chart.",
+      "type": "row",
+      "id": 1,
+      "title": "Memory",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+
+    {
+      "__comment": "─── PANEL 2: Heap Memory Used (line chart) ─────────────────────────────",
+      "__comment2": [
+        "'timeseries' is a LINE CHART over time.",
+        "This panel answers: 'How much JavaScript heap memory is my app using right now?'",
+        "",
+        "PROMQL QUERY EXPLAINED:",
+        "  word_puzzle_nodejs_heap_size_used_bytes",
+        "  → Simply read the current value of this metric.",
+        "    No math needed — it's already in bytes."
+      ],
+      "type": "timeseries",
+      "id": 2,
+      "title": "Heap Memory Used",
+      "description": "How many bytes of heap memory the Node.js process is actively using. A steadily growing line can indicate a memory leak.",
+      "gridPos": { "x": 0, "y": 1, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "__comment": "expr: the PromQL query sent to Prometheus",
+          "expr": "word_puzzle_nodejs_heap_size_used_bytes",
+          "__comment_legendFormat": "legendFormat: label shown in the chart legend. {{instance}} inserts the scrape target address.",
+          "legendFormat": "Heap Used",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "__comment_unit": "unit: tells Grafana how to format the numbers on the Y axis. 'bytes' = auto-converts to KB/MB/GB.",
+          "unit": "bytes",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 15
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "single" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      }
+    },
+
+    {
+      "__comment": "─── PANEL 3: Heap Memory Total vs Used (comparison chart) ──────────────",
+      "__comment2": [
+        "Two lines on one chart:",
+        "  - Total heap allocated (reserved by Node.js runtime)",
+        "  - Heap actually used by your code",
+        "The gap between them = free heap space. A shrinking gap is a warning sign."
+      ],
+      "type": "timeseries",
+      "id": 3,
+      "title": "Heap: Total vs Used",
+      "description": "Total = memory Node.js reserved. Used = memory actually occupied by your objects. The gap between them is free space. Watch out if they converge.",
+      "gridPos": { "x": 12, "y": 1, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "word_puzzle_nodejs_heap_size_total_bytes",
+          "legendFormat": "Heap Total",
+          "refId": "A"
+        },
+        {
+          "expr": "word_puzzle_nodejs_heap_size_used_bytes",
+          "legendFormat": "Heap Used",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      }
+    },
+
+    {
+      "__comment": "─── PANEL 4: Section heading — CPU ──────────────────────────────────────",
+      "type": "row",
+      "id": 4,
+      "title": "CPU",
+      "gridPos": { "x": 0, "y": 9, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+
+    {
+      "__comment": "─── PANEL 5: CPU Usage Rate (line chart) ───────────────────────────────",
+      "__comment2": [
+        "PROMQL QUERY EXPLAINED:",
+        "  rate(word_puzzle_process_cpu_seconds_total[1m])",
+        "",
+        "  word_puzzle_process_cpu_seconds_total is a COUNTER — it only ever goes UP.",
+        "  It counts the total CPU-seconds used since the process started.",
+        "",
+        "  rate(...[1m]) converts the raw counter into a RATE:",
+        "    'How many CPU seconds were consumed per second, averaged over the last 1 minute?'",
+        "",
+        "  A value of 1.0 = 100% of one CPU core is used.",
+        "  A value of 0.5 = 50% of one CPU core is used.",
+        "  This is the most common way to show CPU usage in Prometheus."
+      ],
+      "type": "timeseries",
+      "id": 5,
+      "title": "CPU Usage Rate",
+      "description": "CPU time consumed per second, averaged over the last 1 minute. 1.0 = one full CPU core. Values above 1 mean your app is using more than one core.",
+      "gridPos": { "x": 0, "y": 10, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(word_puzzle_process_cpu_seconds_total[1m])",
+          "legendFormat": "CPU Rate",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "__comment_unit": "percentunit: Grafana multiplies the value by 100 and shows a % symbol. 0.5 → 50%.",
+          "unit": "percentunit",
+          "custom": { "lineWidth": 2, "fillOpacity": 20 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "single" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      }
+    },
+
+    {
+      "__comment": "─── PANEL 6: Event Loop Lag (line chart) ───────────────────────────────",
+      "__comment2": [
+        "Node.js is single-threaded. All your code runs on one 'event loop'.",
+        "If the loop is busy (e.g. processing a big computation), new requests",
+        "have to WAIT. That waiting time is the 'event loop lag'.",
+        "",
+        "PROMQL QUERY:",
+        "  word_puzzle_nodejs_eventloop_lag_seconds",
+        "  → Raw lag value in seconds.",
+        "",
+        "A healthy app should have lag close to 0.",
+        "Spikes above 100ms (0.1s) are noticeable to users as slowness."
+      ],
+      "type": "timeseries",
+      "id": 6,
+      "title": "Event Loop Lag",
+      "description": "How long new tasks must wait before the Node.js event loop runs them. High lag = your app is too busy and users notice slowness.",
+      "gridPos": { "x": 12, "y": 10, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "word_puzzle_nodejs_eventloop_lag_seconds",
+          "legendFormat": "Event Loop Lag",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "__comment_unit": "s = seconds. Grafana will auto-format as ms/µs when values are small.",
+          "unit": "s",
+          "custom": { "lineWidth": 2, "fillOpacity": 20 },
+          "thresholds": {
+            "__comment": "Color the line green → yellow → red as lag increases",
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 0.05, "color": "yellow" },
+              { "value": 0.1, "color": "red" }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "single" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      }
+    },
+
+    {
+      "__comment": "─── PANEL 7: Section heading — Garbage Collection ───────────────────────",
+      "type": "row",
+      "id": 7,
+      "title": "Garbage Collection & Process",
+      "gridPos": { "x": 0, "y": 18, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+
+    {
+      "__comment": "─── PANEL 8: GC Duration Rate (line chart) ─────────────────────────────",
+      "__comment2": [
+        "WHAT IS GARBAGE COLLECTION (GC)?",
+        "  Node.js automatically frees memory that's no longer needed.",
+        "  This process is called 'garbage collection'. While GC runs, your",
+        "  app is PAUSED — it can't process requests. Long GC pauses = bad UX.",
+        "",
+        "PROMQL QUERY:",
+        "  rate(word_puzzle_nodejs_gc_duration_seconds_sum[1m])",
+        "",
+        "  gc_duration_seconds_sum is a running total of time spent in GC.",
+        "  rate(...[1m]) = seconds-per-second spent on GC over the last minute.",
+        "  0.01 means 1% of the time is spent on GC — that's healthy.",
+        "  0.1+ means 10%+ of time is GC — your app may have a memory problem."
+      ],
+      "type": "timeseries",
+      "id": 8,
+      "title": "GC Duration Rate",
+      "description": "Fraction of time spent in garbage collection. High values mean your app has lots of short-lived objects being created and destroyed.",
+      "gridPos": { "x": 0, "y": 19, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(word_puzzle_nodejs_gc_duration_seconds_sum[1m])",
+          "legendFormat": "GC Duration/s",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "lineWidth": 2, "fillOpacity": 15 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "single" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      }
+    },
+
+    {
+      "__comment": "─── PANEL 9: Open File Descriptors (stat) ───────────────────────────────",
+      "__comment2": [
+        "WHAT ARE FILE DESCRIPTORS?",
+        "  Every open file, socket, or network connection uses a 'file descriptor'.",
+        "  Servers have a LIMIT on how many can be open at once (often 1024).",
+        "  If you hit the limit, your app crashes with 'Too many open files'.",
+        "",
+        "'stat' type shows a single big number — the current value.",
+        "It's good for values where you care about RIGHT NOW, not the history."
+      ],
+      "type": "stat",
+      "id": 9,
+      "title": "Open File Descriptors",
+      "description": "Number of open files/sockets. If this climbs toward the OS limit – typically 1024 – your app may be leaking connections.",
+      "gridPos": { "x": 12, "y": 19, "w": 6, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "word_puzzle_process_open_fds",
+          "legendFormat": "Open FDs",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 500,  "color": "yellow" },
+              { "value": 900,  "color": "red" }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "auto",
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+
+    {
+      "__comment": "─── PANEL 10: External Memory (line chart) ──────────────────────────────",
+      "__comment2": [
+        "External memory = memory allocated in C++ (outside the JS heap).",
+        "Mainly used by Buffers (e.g. when reading files or network data).",
+        "Normally low. A big spike here means lots of binary data in memory."
+      ],
+      "type": "timeseries",
+      "id": 10,
+      "title": "External Memory (Buffers)",
+      "description": "Memory allocated outside the JavaScript heap — mainly Node.js Buffers used for I/O operations.",
+      "gridPos": { "x": 18, "y": 19, "w": 6, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "word_puzzle_nodejs_external_memory_bytes",
+          "legendFormat": "External Mem",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": { "lineWidth": 2, "fillOpacity": 15 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "single" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      }
+    },
+
+    {
+      "__comment": "─── PANEL 11: Section heading — Quick At-a-glance stats ─────────────────",
+      "type": "row",
+      "id": 11,
+      "title": "At a Glance (current values)",
+      "gridPos": { "x": 0, "y": 27, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+
+    {
+      "__comment": "─── PANEL 12: Heap Used — Gauge ─────────────────────────────────────────",
+      "__comment2": [
+        "'gauge' type draws a speedometer-style dial.",
+        "Great for showing a single current value with a visual range.",
+        "The max value is set to 512MB so the dial has a sensible scale."
+      ],
+      "type": "gauge",
+      "id": 12,
+      "title": "Heap Used Now",
+      "gridPos": { "x": 0, "y": 28, "w": 6, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "word_puzzle_nodejs_heap_size_used_bytes",
+          "legendFormat": "Heap Used",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "max": 536870912,
+          "__comment_max": "536870912 = 512 MB in bytes. Adjust if your app uses more.",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null,      "color": "green"  },
+              { "value": 268435456, "color": "yellow" },
+              { "__comment": "268435456 = 256 MB",  "value": 402653184, "color": "red" }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      }
+    },
+
+    {
+      "__comment": "─── PANEL 13: CPU Rate — Stat ───────────────────────────────────────────",
+      "type": "stat",
+      "id": 13,
+      "title": "CPU Usage Now",
+      "gridPos": { "x": 6, "y": 28, "w": 6, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(word_puzzle_process_cpu_seconds_total[1m])",
+          "legendFormat": "CPU",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green"  },
+              { "value": 0.5,  "color": "yellow" },
+              { "value": 0.8,  "color": "red"    }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+
+    {
+      "__comment": "─── PANEL 14: Event Loop Lag — Stat ────────────────────────────────────",
+      "type": "stat",
+      "id": 14,
+      "title": "Event Loop Lag Now",
+      "gridPos": { "x": 12, "y": 28, "w": 6, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "word_puzzle_nodejs_eventloop_lag_seconds",
+          "legendFormat": "Lag",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green"  },
+              { "value": 0.05, "color": "yellow" },
+              { "value": 0.1,  "color": "red"    }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+
+    {
+      "__comment": "─── PANEL 15: Up/Down status — Stat ────────────────────────────────────",
+      "__comment2": [
+        "PROMQL: up{job='word-puzzle-app'}",
+        "  'up' is a special Prometheus metric. Prometheus sets it automatically:",
+        "    1 = the target was reachable on the last scrape (app is UP)",
+        "    0 = the target was not reachable (app is DOWN or scrape failed)",
+        "  This gives you a simple green/red status indicator."
+      ],
+      "type": "stat",
+      "id": 15,
+      "title": "App Status",
+      "description": "1 = Prometheus can reach /api/metrics (app is up). 0 = scrape failed (app is down or unreachable).",
+      "gridPos": { "x": 18, "y": 28, "w": 6, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "up{job=\"word-puzzle-app\"}",
+          "legendFormat": "Status",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "__comment": "Value mappings: show text instead of raw 0/1 numbers",
+              "type": "value",
+              "options": {
+                "0": { "text": "DOWN", "color": "red"   },
+                "1": { "text": "UP",   "color": "green" }
+              }
+            }
+          ],
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "red"   },
+              { "value": 1,    "color": "green" }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value"
+      }
+    }
+
+  ]
+}
