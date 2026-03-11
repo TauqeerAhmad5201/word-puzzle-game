@@ -1,0 +1,71 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# FILE: monitoring/grafana/provisioning/datasources/prometheus.yml
+#
+# PURPOSE:
+#   This file tells Grafana to automatically connect to Prometheus as a
+#   "data source" when Grafana starts up for the first time.
+#
+#   Without this file:
+#     - You would need to manually open Grafana, go to Settings → Data Sources,
+#       fill in the Prometheus URL, and click Save.
+#
+#   With this file:
+#     - Grafana reads it on startup and connects to Prometheus automatically.
+#     - You open Grafana and Prometheus is already there, ready to use.
+#
+#   This is called "provisioning" — setting things up in advance via files,
+#   so you don't have to do it manually through the UI every time you start
+#   a fresh container.
+#
+#   This file lives inside the special Grafana provisioning directory:
+#     /etc/grafana/provisioning/datasources/
+#   We mount it there via the volume in docker-compose.yml.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# apiVersion tells Grafana which version of the provisioning config format
+# this file uses. Use 1 — it's the current stable version.
+apiVersion: 1
+
+# datasources: the list of data sources to provision (auto-add) on startup.
+# You can add multiple data sources here (e.g. Prometheus + Loki).
+# For now we only need Prometheus.
+datasources:
+
+  # ── Prometheus Data Source ────────────────────────────────────────────────
+  - name: Prometheus
+    # type: tells Grafana which kind of data source this is.
+    # "prometheus" is the built-in Grafana plugin for Prometheus databases.
+    type: prometheus
+
+    # access: how Grafana connects to the data source.
+    # "proxy"  → Grafana SERVER connects to Prometheus (most common, more secure)
+    # "direct" → your BROWSER connects to Prometheus directly
+    # Use "proxy" so the connection stays inside the Docker network.
+    access: proxy
+
+    # url: the address where Prometheus is running.
+    # "prometheus" is the Docker service name (defined in docker-compose.yml).
+    # Inside Docker's internal network, service names work as hostnames.
+    # Port 9090 is Prometheus' default port.
+    url: http://prometheus:9090
+
+    # isDefault: marks this as the default data source.
+    # When you open the Explore page in Grafana, this source is pre-selected.
+    # Since we only have one source, set it to true.
+    isDefault: true
+
+    # editable: allows you to edit this data source through the Grafana UI.
+    # Set to true so you can tweak settings in the browser if needed.
+    editable: true
+
+    # jsonData: extra settings specific to the Prometheus data source plugin.
+    jsonData:
+      # httpMethod: the HTTP method Grafana uses when querying Prometheus.
+      # "POST" is recommended for Prometheus — it handles large queries better
+      # than GET (which has URL length limits).
+      httpMethod: POST
+
+      # timeInterval: how often your scrape job collects metrics.
+      # Must match scrape_interval in prometheus.yml.
+      # Grafana uses this to align graph resolution with actual data points.
+      timeInterval: "15s"

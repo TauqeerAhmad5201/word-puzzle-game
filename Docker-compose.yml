@@ -1,0 +1,218 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# FILE: Docker-compose.yml
+#
+# PURPOSE:
+#   Docker Compose is a tool that lets you define and run MULTIPLE containers
+#   together with a single command: `docker compose up --build`
+#
+#   Without Docker Compose, you would need to manually:
+#     1. Build the app image
+#     2. Start the app container
+#     3. Start a Prometheus container
+#     4. Start a Grafana container
+#     5. Connect all three so they can talk to each other
+#
+#   This file does ALL of that automatically.
+#
+#   Our stack has 3 services:
+#     ┌─────────────────────────────────────────┐
+#     │  app (Next.js)  →  port 3000            │
+#     │  prometheus     →  port 9090            │
+#     │  grafana        →  port 3001            │
+#     └─────────────────────────────────────────┘
+#
+#   DATA FLOW:
+#     app exposes metrics at /api/metrics
+#       ↓  (Prometheus scrapes every 15s)
+#     prometheus stores those metric numbers over time
+#       ↓  (Grafana queries Prometheus)
+#     grafana visualizes the numbers as graphs
+# ─────────────────────────────────────────────────────────────────────────────
+
+# "services" is the main section where you define each container.
+services:
+
+  # ── SERVICE 1: app ────────────────────────────────────────────────────────
+  # This is our Next.js Word Puzzle Game application.
+  # It is built from the Dockerfile in the current directory.
+  app:
+    # build: tells Docker Compose to BUILD an image from a Dockerfile,
+    # rather than pulling a pre-made image from Docker Hub.
+    # "." means "look for the Dockerfile in the current directory".
+    build: .
+
+    # container_name: gives the running container a human-readable name.
+    # Without this, Docker generates a random name like "project_app_1".
+    container_name: word-puzzle-app
+
+    # ports: maps a port on YOUR machine to a port inside the container.
+    # Format is "HOST_PORT:CONTAINER_PORT"
+    # "3000:3000" means: visiting localhost:3000 on your machine sends
+    # traffic to port 3000 inside the container (where Next.js listens).
+    ports:
+      - "3000:3000"
+
+    # environment: sets environment variables inside the container.
+    # These work exactly like shell variables you'd set with `export VAR=value`.
+    environment:
+      # NODE_ENV=production: tells Next.js to run in production mode,
+      # which disables debug tools and enables performance optimizations.
+      - NODE_ENV=production
+
+    # networks: connects this container to a named Docker network.
+    # All containers on the same network can reach each other by SERVICE NAME.
+    # e.g. Prometheus can reach this app at http://app:3000 because both
+    # are on the "monitoring" network and this service is named "app".
+    networks:
+      - monitoring
+
+    # restart: what to do if the container crashes.
+    # "unless-stopped" means: restart automatically on crash, but don't
+    # restart if you manually stopped it with `docker compose stop`.
+    restart: unless-stopped
+
+  # ── SERVICE 2: prometheus ─────────────────────────────────────────────────
+  # Prometheus is a time-series database. It regularly visits (scrapes) our
+  # app's /api/metrics endpoint, reads the metric numbers, and stores them
+  # with timestamps so you can query them later ("what was memory usage at 3pm?")
+  prometheus:
+    # image: use a pre-built image from Docker Hub instead of building one.
+    # "prom/prometheus:v2.51.0" means: use version 2.51.0 of the official
+    # Prometheus image. Pinning to a version (not "latest") is best practice —
+    # it prevents surprise breakage if a new version is released.
+    image: prom/prometheus:v2.51.0
+
+    container_name: prometheus
+
+    # ports: expose Prometheus UI at http://localhost:9090
+    # You can open this in your browser to:
+    #   - Check if targets (app) are being scraped successfully
+    #   - Run PromQL queries to test your metrics data
+    ports:
+      - "9090:9090"
+
+    # volumes: mount files/folders from your machine INTO the container.
+    # Format is "PATH_ON_YOUR_MACHINE:PATH_INSIDE_CONTAINER"
+    volumes:
+      # Mount our prometheus.yml config file into the container at the path
+      # Prometheus expects it. This tells Prometheus what to scrape.
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+
+      # Mount a named volume for persistent storage of metric data.
+      # Without this, all collected metrics data is LOST when the container stops.
+      # With this, the data survives container restarts.
+      - prometheus_data:/prometheus
+
+    # command: overrides the default startup command of the container.
+    # We pass these arguments to the Prometheus binary when it starts.
+    command:
+      # Tell Prometheus where its config file is (the one we mounted above).
+      - "--config.file=/etc/prometheus/prometheus.yml"
+
+      # Tell Prometheus where to store the metric data on disk.
+      # This path is inside the container, and it maps to the prometheus_data volume.
+      - "--storage.tsdb.path=/prometheus"
+
+      # Enable the /-/reload API endpoint.
+      # With this, you can tell Prometheus to reload its config file without
+      # restarting the whole container: `curl -X POST localhost:9090/-/reload`
+      - "--web.enable-lifecycle"
+
+    networks:
+      - monitoring
+
+    restart: unless-stopped
+
+  # ── SERVICE 3: grafana ────────────────────────────────────────────────────
+  # Grafana is the visualization layer. It connects to Prometheus, lets you
+  # write queries in PromQL (Prometheus Query Language), and displays the
+  # results as beautiful graphs and dashboards.
+  grafana:
+    # Use official Grafana image, pinned to version 10.4.0.
+    image: grafana/grafana:10.4.0
+
+    container_name: grafana
+
+    # ports: expose Grafana UI at http://localhost:3001
+    # We use 3001 (not 3000) to avoid clashing with our app on 3000.
+    # Left side (3001) = your browser, Right side (3000) = inside container
+    # Grafana inside the container always runs on 3000; we remap it to 3001.
+    ports:
+      - "3001:3000"
+
+    # environment: configure Grafana settings via environment variables.
+    # Grafana reads variables prefixed with "GF_" as configuration.
+    environment:
+      # GF_SECURITY_ADMIN_USER: the username for the Grafana admin account.
+      # Default is "admin". You'll use this to log in at http://localhost:3001.
+      - GF_SECURITY_ADMIN_USER=admin
+
+      # GF_SECURITY_ADMIN_PASSWORD: the password for the admin account.
+      # Change this if you ever deploy to a real server!
+      # For local learning, "admin" is fine.
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+
+      # GF_PATHS_PROVISIONING: tells Grafana where to look for provisioning files.
+      # Provisioning files let you pre-configure data sources, dashboards, etc.
+      # so you don't have to set them up manually in the UI.
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+
+    volumes:
+      # Mount persistent storage for Grafana's own data (dashboards you create,
+      # user accounts, alert rules, etc.). Without this, everything is lost
+      # when the container restarts.
+      - grafana_data:/var/lib/grafana
+
+      # Mount our provisioning folder into the container.
+      # Grafana will read this folder on startup and automatically configure
+      # the Prometheus data source (so you don't have to do it manually).
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+
+    # depends_on: tells Docker Compose to start prometheus BEFORE grafana.
+    # Grafana needs Prometheus to be running so it can connect to it.
+    depends_on:
+      - prometheus
+
+    networks:
+      - monitoring
+
+    restart: unless-stopped
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NETWORKS
+#
+# Docker networks are private virtual networks that allow containers to
+# communicate with each other using their SERVICE NAMES as hostnames.
+#
+# Example: Prometheus can reach our app with http://app:3000
+#          Grafana can reach Prometheus with http://prometheus:9090
+#
+# Containers on DIFFERENT networks CANNOT talk to each other.
+# All three services are on the "monitoring" network, so they can all
+# communicate freely.
+# ─────────────────────────────────────────────────────────────────────────────
+networks:
+  monitoring:
+    # driver: bridge is the standard Docker network type.
+    # It creates an isolated virtual network on your machine.
+    driver: bridge
+
+# ─────────────────────────────────────────────────────────────────────────────
+# VOLUMES
+#
+# Named volumes are managed by Docker and persist data across container
+# restarts and removals.
+#
+# Without volumes:
+#   - Stop & restart Prometheus → all collected metric history is gone
+#   - Stop & restart Grafana   → all dashboards you created are gone
+#
+# With volumes:
+#   - Data is stored on your machine and survives container restarts.
+# ─────────────────────────────────────────────────────────────────────────────
+volumes:
+  # Stores Prometheus metric data (time-series database files).
+  prometheus_data:
+
+  # Stores Grafana data (dashboards, users, settings).
+  grafana_data:

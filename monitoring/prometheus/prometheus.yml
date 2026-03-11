@@ -1,0 +1,75 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# FILE: monitoring/prometheus/prometheus.yml
+#
+# PURPOSE:
+#   This is the configuration file for Prometheus.
+#   Prometheus reads this file when it starts up to know:
+#     1. What GLOBAL settings to use (e.g. how often to collect metrics)
+#     2. Which "jobs" (targets/apps) to scrape (collect metrics from)
+#
+#   Think of Prometheus as a journalist who visits different sources on a
+#   schedule to collect data. This file is the journalist's schedule +
+#   list of sources to visit.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────────
+# GLOBAL SETTINGS
+# These apply to every job below, unless a job overrides them.
+# ─────────────────────────────────────────────────────────────────
+global:
+
+  # scrape_interval: How often Prometheus visits each target to collect metrics.
+  # "15s" means every 15 seconds Prometheus will send a GET request to
+  # each target's /metrics URL and store the numbers it gets back.
+  #
+  # Lower = more frequent data = more storage used.
+  # Higher = less frequent = you might miss short spikes.
+  # 15s is a sensible default for most apps.
+  scrape_interval: 15s
+
+  # evaluation_interval: How often Prometheus evaluates alerting rules.
+  # We have no alert rules right now, but this is required by the config.
+  # Keep it the same as scrape_interval so alerts are checked every 15s.
+  evaluation_interval: 15s
+
+# ─────────────────────────────────────────────────────────────────
+# SCRAPE CONFIGS
+# This section lists all the services Prometheus should collect
+# metrics from. Each entry is called a "job".
+# ─────────────────────────────────────────────────────────────────
+scrape_configs:
+
+  # ── JOB 1: Prometheus itself ──────────────────────────────────
+  # Prometheus can monitor ITSELF. This is useful to see:
+  #   - How many scrapes are succeeding/failing
+  #   - How long each scrape takes
+  #   - Prometheus' own memory/CPU usage
+  - job_name: "prometheus"
+    # static_configs lists the actual host:port addresses to scrape.
+    # "localhost:9090" means Prometheus will visit its own /metrics endpoint.
+    # Inside Docker, "localhost" inside the prometheus container points to itself.
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # ── JOB 2: Our Next.js Word Puzzle App ───────────────────────
+  # This tells Prometheus to collect metrics from our app.
+  - job_name: "word-puzzle-app"
+    # The scrape path (URL path) where metrics are exposed.
+    # Default is /metrics, but our app exposes them at /api/metrics.
+    # So we override the path here.
+    metrics_path: "/api/metrics"
+
+    # static_configs: the list of app instances to scrape.
+    # "app" is the Docker service name (defined in docker-compose.yml).
+    # Inside Docker's internal network, service names act as hostnames.
+    # Port 3000 is where our Next.js app listens.
+    #
+    # So Prometheus will visit: http://app:3000/api/metrics every 15s.
+    static_configs:
+      - targets: ["app:3000"]
+        # labels: extra key-value pairs attached to every metric collected
+        # from this target. This helps you filter/group metrics in Grafana.
+        # e.g. In Grafana you can filter by: environment="production"
+        labels:
+          environment: "production"
+          app: "word-puzzle-game"
